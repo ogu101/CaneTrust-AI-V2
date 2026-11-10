@@ -96,7 +96,7 @@
     <div class="card" id="upload">
       <label class="field" for="files">Documents (PDF, one or several)</label>
       <input id="files" type="file" accept=".pdf" multiple>
-      <p class="hint">Files must be machine-readable for now. Total upload size is limited to about 4.5 MB.</p>
+      <p class="hint">PDFs are read in your browser and only their text is sent, so large files are fine. Scanned pages without a text layer can't be read yet.</p>
       <button class="primary" id="triageBtn">Find documents</button>
       <div id="msg"></div>
     </div>
@@ -124,7 +124,51 @@
 
   <footer>Miami AI &amp; Law Lab</footer>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const LIMIT = 4.4 * 1024 * 1024; // Vercel rejects request bodies over 4.5 MB
+
+// Rebuild a page's text line by line (top to bottom, left to right), so
+// headers and footers land on their own lines for page-number detection.
+async function pageText(page) {
+  const { items } = await page.getTextContent();
+  const rows = [];
+  for (const it of items) {
+    if (!it.str || !it.str.trim()) continue;
+    const x = it.transform[4], y = it.transform[5];
+    const h = Math.abs(it.transform[3]) || it.height || 10;
+    let row = rows.find((r) => Math.abs(r.y - y) <= Math.max(2, h * 0.4));
+    if (!row) rows.push(row = { y, items: [] });
+    row.items.push({ x, s: it.str, w: it.width || 0 });
+  }
+  rows.sort((a, b) => b.y - a.y);
+  return rows.map((r) => {
+    r.items.sort((a, b) => a.x - b.x);
+    let out = "", end = null;
+    for (const it of r.items) {
+      if (end !== null && it.x - end > 1) out += " ";
+      out += it.s;
+      end = it.x + it.w;
+    }
+    return out.replace(/\s+/g, " ").trim();
+  }).join("\n");
+}
+
+async function readPdfs(fileList, onProgress) {
+  const out = [];
+  for (const f of fileList) {
+    const pdf = await pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise;
+    const pages = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      onProgress(`Reading ${f.name}, page ${i} of ${pdf.numPages}.`);
+      pages.push(await pageText(await pdf.getPage(i)));
+    }
+    out.push({ name: f.name, pages });
+  }
+  return out;
+}
+
 const TYPES = {
   trust: "Trust", restatement: "Restatement", amendment: "Amendment", will: "Will", codicil: "Codicil",
   notice_of_administration: "Notice of administration", court_filing: "Court filing", letter: "Letter", other: "Other",
@@ -142,14 +186,14 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 
 function setMsg(el, text, cls = "") { el.className = cls; el.textContent = text; }
 
-async function postJSONorFile(url, body) {
-  const res = await fetch(url, body instanceof FormData
-    ? { method: "POST", body }
-    : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+async function postJSON(url, body) {
+  const json = JSON.stringify(body);
+  if (json.length > LIMIT) throw new Error(`the extracted text is ${(json.length / 1048576).toFixed(1)} MB, over Vercel's 4.5 MB request limit. Try fewer files at once.`);
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: json });
   if (!res.ok) {
     let detail = await res.text();
     try { detail = JSON.parse(detail).detail || detail; } catch {}
-    if (res.status === 413) detail = "The upload is over Vercel's 4.5 MB request limit.";
+    if (res.status === 413) detail = "The request is over Vercel's 4.5 MB limit.";
     throw new Error(detail);
   }
   return res;
@@ -159,12 +203,13 @@ async function postJSONorFile(url, body) {
 $("triageBtn").onclick = async () => {
   const files = $("files").files;
   if (!files.length) return setMsg($("msg"), "Choose at least one PDF.", "err");
-  const fd = new FormData();
-  for (const f of files) fd.append("files", f);
   $("triageBtn").disabled = true;
-  setMsg($("msg"), "Reading pages and finding where each document starts and ends.");
   try {
-    S = await (await postJSONorFile("/api/triage", fd)).json();
+    const read = await readPdfs(files, (t) => setMsg($("msg"), t));
+    setMsg($("msg"), "Finding where each document starts and ends.");
+    S = await (await postJSON("/api/triage", { files: read })).json();
+    const texts = read.flatMap((f) => f.pages);
+    S.pages.forEach((p, i) => { p.text = texts[i]; });
     proposed = JSON.parse(JSON.stringify(S.documents));
     if (canSkip()) return runAnnotation(true);
     showConfirm();
@@ -327,7 +372,7 @@ async function runAnnotation(skipped) {
       documents: S.documents.map(({ reviewed, ...d }) => d),
       proposed,
     };
-    const res = await postJSONorFile("/api/annotate", body);
+    const res = await postJSON("/api/annotate", body);
     const blob = await res.blob();
     const name = (res.headers.get("Content-Disposition") || "").match(/filename="(.+)"/)?.[1] || "annotation.xlsx";
     const a = document.createElement("a");
