@@ -1,27 +1,23 @@
 """
-Annotation: confirmed document list -> one annotation workbook per chain.
+Annotation: confirmed document list -> one workbook with one annotation tab
+per chain, named after the document it annotates, plus a Triage tab.
 
 The browser sends back the page texts it received from triage together with
 the confirmed documents. Page labels are recomputed here because a reviewer
 may have moved boundaries; chains are rebuilt from the confirmed documents;
 each chain gets one call to the existing analyze_document(), in parallel.
-Every reviewer correction is written into a "Triage" sheet in each workbook
-as the audit record.
+Every reviewer correction is written into the "Triage" tab as the audit record.
 """
 
 import io
 import re
-import tempfile
-import zipfile
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-
 from openpyxl import load_workbook
 from openpyxl.styles import Font
 
 import config
 from llm import InstrumentLayer, analyze_document
-from render import render_to_workbook
+from render import fill_sheet
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 TRACKED = ("start", "end", "type", "title", "date", "treatment", "chain", "superseded")
@@ -99,8 +95,7 @@ def corrections(proposed: list[dict], confirmed: list[dict]) -> list[str]:
     return out
 
 
-def add_triage_sheet(path: Path, files: list[str], docs: list[dict], pages: list[dict], changes: list[str]) -> None:
-    wb = load_workbook(path)
+def add_triage_sheet(wb, files: list[str], docs: list[dict], pages: list[dict], changes: list[str]) -> None:
     ws = wb.create_sheet("Triage")
     bold = Font(bold=True)
     ws.append(["Confirmed documents (file order)"])
@@ -125,11 +120,22 @@ def add_triage_sheet(path: Path, files: list[str], docs: list[dict], pages: list
         ws.append([line])
     for col, width in zip("ABCDEFGHIJ", (28, 12, 26, 18, 44, 12, 11, 30, 11, 60)):
         ws.column_dimensions[col].width = width
-    wb.save(path)
 
 
 def _safe(name: str) -> str:
     return re.sub(r"[^\w\- .]+", "", name).strip()[:80] or "annotation"
+
+
+def _tab_name(name: str, taken: set[str]) -> str:
+    """Excel tab names: at most 31 characters, none of []:*?/\\, unique
+    (case-insensitive), and not 'Instructions' or 'Triage'."""
+    base = re.sub(r"[\[\]:*?/\\]", "", name).strip().strip("'")[:31].rstrip() or "Annotation"
+    tab, k = base, 2
+    while tab.lower() in taken:
+        suffix = f" ({k})"
+        tab, k = base[:31 - len(suffix)].rstrip() + suffix, k + 1
+    taken.add(tab.lower())
+    return tab
 
 
 def run(payload: dict) -> tuple[str, bytes, str]:
@@ -149,25 +155,32 @@ def run(payload: dict) -> tuple[str, bytes, str]:
     key = config.api_key()
 
     def one(name: str):
-        annotation = analyze_document(
+        return analyze_document(
             name, layers[name],
             api_key=key, model=config.CLAUDE_MODEL, effort=config.CLAUDE_EFFORT,
             max_tokens=config.MAX_TOKENS_PER_REQUEST, rules_path=config.EXTRACTION_RULES_PATH,
         )
-        out = Path(tempfile.mkdtemp()) / f"{_safe(name)}_annotation.xlsx"
-        render_to_workbook(annotation, str(config.ANNOTATION_TEMPLATE_FILE), str(out))
-        add_triage_sheet(out, files, docs, pages, changes)
-        return out
 
-    with ThreadPoolExecutor(max_workers=min(4, len(layers))) as pool:
-        outputs = list(pool.map(one, layers))
+    names = list(layers)
+    with ThreadPoolExecutor(max_workers=min(4, len(names))) as pool:
+        annotations = list(pool.map(one, names))
 
-    if len(outputs) == 1:
-        return outputs[0].name, outputs[0].read_bytes(), XLSX
+    # One workbook: Instructions, one tab per chain, then Triage.
+    wb = load_workbook(config.ANNOTATION_TEMPLATE_FILE)
+    template = wb["Annotation"]
+    taken = {"instructions", "triage", "annotation"}
+    for name, annotation in zip(names, annotations):
+        ws = wb.copy_worksheet(template)
+        ws.title = _tab_name(name, taken)
+        ws.freeze_panes = template.freeze_panes
+        ws.sheet_view.showGridLines = template.sheet_view.showGridLines
+        ws.print_title_rows = template.print_title_rows
+        fill_sheet(ws, annotation)
+    wb.remove(template)
+    add_triage_sheet(wb, files, docs, pages, changes)
+    wb.active = 1  # open on the first annotation tab
 
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for path in outputs:
-            z.write(path, path.name)
-    base = _safe(Path(files[0]).stem) if files else "packet"
-    return f"{base}_annotations.zip", buf.getvalue(), "application/zip"
+    wb.save(buf)
+    base = _safe(names[0]) if len(names) == 1 else _safe(files[0].rsplit(".", 1)[0] if files else "packet")
+    return f"{base}_annotation.xlsx", buf.getvalue(), XLSX
