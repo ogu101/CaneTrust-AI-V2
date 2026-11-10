@@ -1,5 +1,6 @@
 """
-Triage: uploaded PDFs -> page records -> proposed list of documents.
+Triage: page texts (extracted in the browser) -> page records -> proposed
+list of documents.
 
 Code computes every checkable fact about each page (printed page number,
 document-system footer numbers, form numbers, dates, University mentions).
@@ -12,12 +13,10 @@ affected rows instead of guessing silently.
 
 import re
 from datetime import date
-from io import BytesIO
 from typing import Literal, Optional
 
 import anthropic
 from pydantic import Field
-from pypdf import PdfReader
 
 import config
 from schema import StrictModel
@@ -113,18 +112,18 @@ def _printed_number(head: list[str], foot: list[str]) -> Optional[str]:
     return None
 
 
-def extract_pages(files: list[tuple[str, bytes]]) -> list[dict]:
+def extract_pages(files: list[dict]) -> list[dict]:
+    """files: [{"name": str, "pages": [page text, ...]}, ...] in upload order."""
     pages = []
-    for fi, (name, data) in enumerate(files):
-        reader = PdfReader(BytesIO(data))
-        for pi, page in enumerate(reader.pages, start=1):
-            text = page.extract_text() or ""
+    for fi, f in enumerate(files):
+        for pi, text in enumerate(f["pages"], start=1):
+            text = text or ""
             lines = [l.strip() for l in text.splitlines() if l.strip()]
             head, foot = lines[:3], lines[-4:]
             pages.append({
                 "n": len(pages) + 1,
                 "file_index": fi,
-                "file": name,
+                "file": f["name"],
                 "page_in_file": pi,
                 "text": text,
                 "has_text": len(text.strip()) > 20,
@@ -361,7 +360,9 @@ def finalize(raw_docs: list[dict], pages: list[dict]) -> list[dict]:
 # Entry point
 # ---------------------------------------------------------------------------
 
-def run(files: list[tuple[str, bytes]]) -> dict:
+def run(files: list[dict]) -> dict:
+    if not files or not all(isinstance(f.get("pages"), list) for f in files):
+        raise ValueError("Expected a list of files, each with a list of page texts.")
     pages = extract_pages(files)
     if not pages:
         raise ValueError("No pages found in the uploaded files.")
@@ -381,8 +382,9 @@ def run(files: list[tuple[str, bytes]]) -> dict:
         raw.sort(key=lambda d: d["start_page"])
 
     return {
-        "files": [name for name, _ in files],
-        "pages": [{k: p[k] for k in ("n", "file_index", "page_in_file", "text", "printed", "has_text")} for p in pages],
+        "files": [f["name"] for f in files],
+        # No page text in the response: the browser already has it.
+        "pages": [{k: p[k] for k in ("n", "file_index", "page_in_file", "printed", "has_text")} for p in pages],
         "documents": finalize(raw, pages),
         "mixed_matters": {"suspected": result.mixed_matters_suspected,
                           "explanation": result.mixed_matters_explanation},
