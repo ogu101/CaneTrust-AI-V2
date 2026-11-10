@@ -1,16 +1,18 @@
 """
 Two requests, never one held open while a person decides:
 
-  POST /api/triage    PDFs in  -> pages + proposed documents out (JSON)
+  POST /api/triage    page texts in (JSON) -> page facts + proposed documents out
   POST /api/annotate  confirmed documents + pages in -> .xlsx (or .zip) out
 
-Nothing is stored on the server between the two; the browser holds the state.
+PDFs never leave the browser: it extracts the text and sends only that, which
+keeps requests far under Vercel's 4.5 MB limit. Nothing is stored on the
+server between the two requests; the browser holds the state.
 """
 
 import sys
 from pathlib import Path
 
-from fastapi import Body, FastAPI, UploadFile
+from fastapi import Body, FastAPI
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -43,10 +45,9 @@ def _error(e: Exception) -> JSONResponse:
 
 
 @app.post("/api/triage")
-async def triage_route(files: list[UploadFile]):
+def triage_route(payload: dict = Body(...)):
     try:
-        data = [(f.filename or f"file{i + 1}.pdf", await f.read()) for i, f in enumerate(files)]
-        return triage.run(data)
+        return triage.run(payload.get("files", []))
     except Exception as e:  # surface the real reason in the UI
         return _error(e)
 
