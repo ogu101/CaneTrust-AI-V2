@@ -21,9 +21,10 @@ MiLA annotation template for each instrument chain.
 3. **Annotate** (`POST /api/annotate`). Page labels are recomputed, chains
    rebuilt (trust + amendments, will + codicils, ordered by date), and each
    chain runs through the original `analyze_document()` in parallel. Context
-   documents are attached to every chain. Each workbook gets a **Triage** sheet
-   with the confirmed documents and every reviewer correction. One chain
-   returns an `.xlsx`; several return a `.zip`.
+   documents are attached to every chain. The result is one `.xlsx`: the
+   Instructions tab, one annotation tab per chain named after its document,
+   and a **Triage** tab with the confirmed documents and every reviewer
+   correction.
 
 Nothing is stored on the server; the browser holds the pages between steps.
 
