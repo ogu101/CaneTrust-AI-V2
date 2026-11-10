@@ -2,6 +2,4 @@ anthropic
 pydantic
 python-dotenv
 openpyxl
-pypdf
 fastapi
-python-multipart
