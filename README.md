@@ -6,7 +6,9 @@ MiLA annotation template for each instrument chain.
 
 ## Flow
 
-1. **Triage** (`POST /api/triage`). Code reads every page and computes the
+1. **Triage** (`POST /api/triage`). The browser extracts each page's text with
+   pdf.js and sends only the text, so the PDFs never leave the browser. Code
+   computes the
    printed page number, footer document numbers, form numbers, dates and
    University mentions. One Claude call over short page previews returns the
    document list. Code checks it (every page covered once, nothing crossing
@@ -49,7 +51,8 @@ server pointed at the same origin (or just test on a Vercel preview).
 
 ## Limits to know
 
-- **Upload size:** Vercel caps a request at 4.5 MB, so the total PDF upload must be under that.
+- **Request size:** Vercel caps a request at 4.5 MB. Only text is sent, so a
+  packet of several hundred pages fits; the page warns before sending if not.
 - **Time:** functions are set to 300 s (`vercel.json`). If a long chain times out on Pro, raise `maxDuration` to 800.
 - **Scans:** pages without a text layer are flagged; OCR isn't in yet.
 - **Very long packets:** triage is a single call. Past roughly 500 pages it would need overlapping windows, which aren't built.
