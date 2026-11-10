@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CaneTrust AI</title>
+<style>
+  :root {
+    --um-green: #005030;
+    --um-green-dark: #003d25;
+    --um-orange: #f47321;
+    --um-orange-dark: #d85f12;
+    --ink: #1a1a1a;
+    --muted: #5f6b66;
+    --line: #dfe5e2;
+    --bg: #f4f7f5;
+    --amber: #fff4e0;
+    --amber-line: #f0b45a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); min-height: 100vh; }
+  header {
+    background: linear-gradient(135deg, var(--um-green) 0%, var(--um-green-dark) 100%);
+    color: #fff; padding: 48px 16px 72px; text-align: center; border-bottom: 5px solid var(--um-orange);
+  }
+  header h1 { margin: 0; font-size: 2rem; letter-spacing: .5px; }
+  header h1 span { color: var(--um-orange); }
+  header p { margin: 10px auto 0; max-width: 520px; color: #cfe3d8; line-height: 1.5; }
+
+  main { max-width: 520px; margin: -40px auto 48px; padding: 0 16px; }
+  main.wide { max-width: 1180px; }
+  .card { background: #fff; border-radius: 14px; padding: 28px; box-shadow: 0 10px 30px rgba(0, 48, 30, .12); border: 1px solid var(--line); }
+  .hidden { display: none; }
+
+  label.field { display: block; margin: 0 0 6px; font-weight: 600; font-size: .85rem; color: var(--um-green); }
+  input[type="file"] {
+    width: 100%; padding: 18px 12px; font-size: .95rem; border: 2px dashed var(--um-green); border-radius: 10px;
+    background: #f1f8f4; color: var(--muted); cursor: pointer;
+  }
+  input[type="file"]::file-selector-button {
+    margin-right: 12px; padding: 8px 14px; border: 0; border-radius: 6px; background: var(--um-green); color: #fff; font-weight: 600; cursor: pointer;
+  }
+  .hint { color: var(--muted); font-size: .85rem; margin: 8px 0 0; line-height: 1.45; }
+
+  button { font: inherit; cursor: pointer; }
+  .primary {
+    width: 100%; margin-top: 24px; padding: 13px 18px; background: var(--um-orange); color: #fff; font-size: 1rem;
+    font-weight: 700; border: 0; border-radius: 8px;
+  }
+  .primary:hover { background: var(--um-orange-dark); }
+  .primary:disabled { opacity: .55; cursor: not-allowed; }
+  .ghost { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; font-size: .8rem; color: var(--um-green); }
+  .ghost:hover { border-color: var(--um-green); }
+  .ghost:disabled { opacity: .4; cursor: not-allowed; }
+  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  #msg { margin-top: 16px; min-height: 1.4em; font-size: .92rem; color: var(--muted); text-align: center; }
+  #msg.ok { color: var(--um-green); font-weight: 600; }
+  #msg.err { color: #b3261e; }
+
+  /* Confirm screen */
+  .summary { font-size: 1.05rem; font-weight: 600; color: var(--um-green); margin: 0 0 6px; }
+  .sub { color: var(--muted); font-size: .88rem; margin: 0 0 18px; }
+  .banner { border: 1px solid var(--amber-line); background: var(--amber); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; font-size: .9rem; line-height: 1.45; }
+  .banner label { display: flex; gap: 8px; align-items: center; margin-top: 8px; font-weight: 600; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; min-width: 1050px; font-size: .86rem; }
+  th { text-align: left; background: #f1f8f4; color: var(--um-green); font-weight: 600; padding: 9px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  tr.attn td { background: var(--amber); }
+  tr.attn td:first-child { box-shadow: inset 4px 0 0 var(--amber-line); }
+  tr.quiet td { color: #6b7570; }
+  tr.reviewed td:first-child { box-shadow: inset 4px 0 0 var(--um-green); }
+  td select, td input[type="text"], td input[type="date"] {
+    width: 100%; padding: 6px 7px; font: inherit; border: 1px solid var(--line); border-radius: 6px; background: #fff;
+  }
+  td select:focus, td input:focus { outline: none; border-color: var(--um-orange); box-shadow: 0 0 0 3px rgba(244, 115, 33, .2); }
+  .pages b { display: block; }
+  .pages small, .note small { color: var(--muted); display: block; margin-top: 2px; }
+  .note ul { margin: 6px 0 0; padding-left: 16px; color: #8a4b00; }
+  .actions { display: flex; gap: 12px; align-items: center; margin-top: 20px; }
+  .actions .primary { width: auto; margin: 0; padding: 12px 22px; }
+
+  footer { text-align: center; color: var(--muted); font-size: .8rem; padding-bottom: 32px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Cane<span>Trust</span> AI</h1>
+    <p>Upload a packet or separate trust, will and amendment PDFs. Confirm the documents found, then get a filled annotation spreadsheet to review.</p>
+  </header>
+
+  <main id="main">
+    <!-- Step 1: upload -->
+    <div class="card" id="upload">
+      <label class="field" for="files">Documents (PDF, one or several)</label>
+      <input id="files" type="file" accept=".pdf" multiple>
+      <p class="hint">Files must be machine-readable for now. Total upload size is limited to about 4.5 MB.</p>
+      <button class="primary" id="triageBtn">Find documents</button>
+      <div id="msg"></div>
+    </div>
+
+    <!-- Step 2: confirm -->
+    <div class="card hidden" id="confirm">
+      <p class="summary" id="summary"></p>
+      <p class="sub">Rows in amber need a decision. Change anything that's wrong, then generate the annotation.</p>
+      <div id="banners"></div>
+      <div class="scroll"><table>
+        <thead><tr>
+          <th style="width:15%">Pages</th><th style="width:13%">Type</th><th style="width:18%">Title</th>
+          <th style="width:10%">Date</th><th style="width:11%">Treatment</th><th style="width:13%">Chain</th>
+          <th style="width:20%">Note</th><th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+      <div class="actions">
+        <button class="primary" id="annotateBtn">Generate annotation</button>
+        <button class="ghost" id="restartBtn">Start over</button>
+      </div>
+      <div id="msg2" class="hint"></div>
+    </div>
+  </main>
+
+  <footer>Miami AI &amp; Law Lab</footer>
+
+<script>
+const TYPES = {
+  trust: "Trust", restatement: "Restatement", amendment: "Amendment", will: "Will", codicil: "Codicil",
+  notice_of_administration: "Notice of administration", court_filing: "Court filing", letter: "Letter", other: "Other",
+};
+const DEFAULTS = { trust: "annotate", restatement: "annotate", amendment: "annotate", will: "annotate", codicil: "annotate",
+  notice_of_administration: "context", letter: "context", court_filing: "ignore", other: "ignore" };
+const TREATMENTS = { annotate: "Annotate", context: "Use as context", ignore: "Ignore" };
+
+let S = null;        // triage response, plus edited documents
+let proposed = [];   // untouched copy for the audit record
+let splitCount = 0;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function setMsg(el, text, cls = "") { el.className = cls; el.textContent = text; }
+
+async function postJSONorFile(url, body) {
+  const res = await fetch(url, body instanceof FormData
+    ? { method: "POST", body }
+    : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) {
+    let detail = await res.text();
+    try { detail = JSON.parse(detail).detail || detail; } catch {}
+    if (res.status === 413) detail = "The upload is over Vercel's 4.5 MB request limit.";
+    throw new Error(detail);
+  }
+  return res;
+}
+
+// ---------- Step 1: triage ----------
+$("triageBtn").onclick = async () => {
+  const files = $("files").files;
+  if (!files.length) return setMsg($("msg"), "Choose at least one PDF.", "err");
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f);
+  $("triageBtn").disabled = true;
+  setMsg($("msg"), "Reading pages and finding where each document starts and ends.");
+  try {
+    S = await (await postJSONorFile("/api/triage", fd)).json();
+    proposed = JSON.parse(JSON.stringify(S.documents));
+    if (canSkip()) return runAnnotation(true);
+    showConfirm();
+  } catch (e) {
+    setMsg($("msg"), "Triage failed: " + e.message, "err");
+  } finally {
+    $("triageBtn").disabled = false;
+  }
+};
+
+function canSkip() {
+  const d = S.documents;
+  return d.length === 1 && d[0].confidence === "high" && !d[0].attention.length
+    && d[0].treatment === "annotate" && !S.mixed_matters.suspected && !S.missing_instruments.length;
+}
+
+// ---------- Step 2: confirm ----------
+function showConfirm() {
+  $("upload").classList.add("hidden");
+  $("confirm").classList.remove("hidden");
+  $("main").classList.add("wide");
+  renderBanners();
+  render();
+}
+
+function renderBanners() {
+  const b = [];
+  if (S.mixed_matters.suspected) {
+    b.push(`<div class="banner"><b>This packet may mix more than one person's papers.</b> ${esc(S.mixed_matters.explanation)}
+      <label><input type="checkbox" id="mixedOk"> I've checked: everything set to Annotate or context belongs to one matter</label></div>`);
+  }
+  if (S.missing_instruments.length) {
+    b.push(`<div class="banner"><b>Referred to but not in the packet:</b> ${S.missing_instruments.map(esc).join("; ")}.
+      The annotation will mark affected answers as Could not determine unless you add these.</div>`);
+  }
+  if (S.triage_problems.length) {
+    b.push(`<div class="banner"><b>Triage didn't pass its checks after a retry,</b> so some boundaries were adjusted automatically and flagged below.</div>`);
+  }
+  $("banners").innerHTML = b.join("");
+  const box = $("mixedOk");
+  if (box) box.onchange = render;
+}
+
+function chainOptions() {
+  const names = new Set();
+  for (const d of S.documents) if (d.treatment === "annotate" && d.chain) names.add(d.chain);
+  return [...names];
+}
+
+function pageInfo(d) {
+  const a = S.pages[d.start - 1], z = S.pages[d.end - 1];
+  const file = S.files[a.file_index];
+  const inFile = a.page_in_file === z.page_in_file ? `p. ${a.page_in_file}` : `pp. ${a.page_in_file}–${z.page_in_file}`;
+  const printed = a.printed && z.printed ? `printed ${a.printed}${a.printed !== z.printed ? "–" + z.printed : ""}` : "no printed numbers found";
+  return `<b>${esc(file)}</b>${inFile}<small>${printed}</small>`;
+}
+
+function render() {
+  const docs = S.documents;
+  const chains = chainOptions();
+  $("rows").innerHTML = docs.map((d, i) => {
+    const cls = [d.attention.length && !d.reviewed ? "attn" : "", d.reviewed ? "reviewed" : "", d.treatment === "ignore" && !d.attention.length ? "quiet" : ""].join(" ");
+    const next = docs[i + 1];
+    const canMerge = next && next.file_index === d.file_index;
+    const chainSel = d.treatment === "annotate"
+      ? `<select data-i="${i}" data-f="chain">${[...new Set([...chains, d.title])].map((c) =>
+          `<option ${c === d.chain ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
+         <label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:.8rem">
+           <input type="checkbox" data-i="${i}" data-f="superseded" ${d.superseded ? "checked" : ""}> Superseded</label>`
+      : `<small style="color:var(--muted)">n/a</small>`;
+    return `<tr class="${cls}">
+      <td class="pages">${pageInfo(d)}</td>
+      <td><select data-i="${i}" data-f="type">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${k === d.type ? "selected" : ""}>${v}</option>`).join("")}</select></td>
+      <td><input type="text" data-i="${i}" data-f="title" value="${esc(d.title)}"></td>
+      <td><input type="date" data-i="${i}" data-f="date" value="${esc(d.date || "")}"></td>
+      <td><select data-i="${i}" data-f="treatment">${Object.entries(TREATMENTS).map(([k, v]) => `<option value="${k}" ${k === d.treatment ? "selected" : ""}>${v}</option>`).join("")}</select></td>
+      <td>${chainSel}</td>
+      <td class="note">${esc(d.reason)}<small>${esc(d.evidence)}${d.um_count ? ` UM mentions: ${d.um_count}.` : ""}</small>
+        ${d.attention.length ? `<ul>${d.attention.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>` : ""}</td>
+      <td><div class="row-actions">
+        <button class="ghost" data-split="${i}" ${d.start === d.end ? "disabled" : ""}>Split</button>
+        <button class="ghost" data-merge="${i}" ${canMerge ? "" : "disabled"}>Merge with next</button>
+      </div></td></tr>`;
+  }).join("");
+  updateSummary();
+}
+
+function updateSummary() {
+  const docs = S.documents;
+  const count = (t) => docs.filter((d) => d.treatment === t).length;
+  const chains = new Set(docs.filter((d) => d.treatment === "annotate").map((d) => d.chain || d.title));
+  const open = docs.filter((d) => d.attention.length && !d.reviewed).length;
+  $("summary").textContent =
+    `${docs.length} document${docs.length === 1 ? "" : "s"} in ${S.files.length} file${S.files.length === 1 ? "" : "s"}: ` +
+    `${count("annotate")} to annotate in ${chains.size} chain${chains.size === 1 ? "" : "s"}, ${count("context")} as context, ${count("ignore")} ignored.` +
+    (open ? ` ${open} need${open === 1 ? "s" : ""} a look.` : "");
+  const blocked = S.mixed_matters.suspected && !($("mixedOk") && $("mixedOk").checked);
+  $("annotateBtn").disabled = blocked || !count("annotate");
+  $("msg2").textContent = blocked ? "Confirm the mixed-matters check above to continue."
+    : !count("annotate") ? "Set at least one document to Annotate." : "";
+}
+
+$("rows").addEventListener("change", (e) => {
+  const el = e.target, i = +el.dataset.i, f = el.dataset.f;
+  if (!f) return;
+  const d = S.documents[i];
+  d.reviewed = true;
+  if (f === "superseded") d.superseded = el.checked;
+  else if (f === "date") d.date = el.value || null;
+  else if (f === "type") {
+    if (d.treatment === DEFAULTS[d.type]) d.treatment = DEFAULTS[el.value];
+    d.type = el.value;
+    if (["trust", "will"].includes(d.type) && d.treatment === "annotate") d.chain = d.title;
+  } else if (f === "treatment") {
+    d.treatment = el.value;
+    if (d.treatment === "annotate" && !d.chain) d.chain = chainOptions()[0] || d.title;
+  } else d[f] = el.value;
+  render();
+});
+
+$("rows").addEventListener("click", (e) => {
+  const s = e.target.dataset.split, m = e.target.dataset.merge;
+  const docs = S.documents;
+  if (s !== undefined) {
+    const d = docs[+s];
+    const a = S.pages[d.start - 1].page_in_file, z = S.pages[d.end - 1].page_in_file;
+    const ans = prompt(`Split this document after which page of the file? (${a} to ${z - 1})`);
+    const at = parseInt(ans, 10);
+    if (!(at >= a && at < z)) return;
+    const cut = d.start + (at - a);
+    const part = { ...JSON.parse(JSON.stringify(d)), id: `${d.id}-s${++splitCount}`, start: cut + 1,
+      title: d.title + " (part 2)", date: null, attention: ["Created by a split. Check its type, title and date."], reviewed: false };
+    d.end = cut; d.reviewed = true;
+    docs.splice(+s + 1, 0, part);
+  }
+  if (m !== undefined) {
+    const d = docs[+m], next = docs[+m + 1];
+    d.end = next.end; d.reviewed = true;
+    d.um_count += next.um_count;
+    docs.splice(+m + 1, 1);
+  }
+  if (s !== undefined || m !== undefined) render();
+});
+
+// ---------- Step 3: annotate ----------
+$("annotateBtn").onclick = () => runAnnotation(false);
+$("restartBtn").onclick = () => location.reload();
+
+async function runAnnotation(skipped) {
+  const msgEl = skipped ? $("msg") : $("msg2");
+  const btn = skipped ? $("triageBtn") : $("annotateBtn");
+  btn.disabled = true;
+  const d0 = S.documents[0];
+  setMsg(msgEl, (skipped ? `Found one document, ${d0.title}, with high confidence, so confirmation was skipped. ` : "")
+    + "Annotating. Long documents can take a few minutes.");
+  try {
+    const body = {
+      files: S.files,
+      pages: S.pages.map(({ file_index, page_in_file, text, printed }) => ({ file_index, page_in_file, text, printed })),
+      documents: S.documents.map(({ reviewed, ...d }) => d),
+      proposed,
+    };
+    const res = await postJSONorFile("/api/annotate", body);
+    const blob = await res.blob();
+    const name = (res.headers.get("Content-Disposition") || "").match(/filename="(.+)"/)?.[1] || "annotation.xlsx";
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setMsg(msgEl, (skipped ? `Annotated ${d0.title} (${TYPES[d0.type]}${d0.date ? ", " + d0.date : ""}). ` : "")
+      + `Done. ${name} should be downloading.`, skipped ? "ok" : "");
+  } catch (e) {
+    setMsg(msgEl, "Annotation failed: " + e.message, skipped ? "err" : "");
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
