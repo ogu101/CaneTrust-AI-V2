@@ -11,14 +11,30 @@ import sys
 from pathlib import Path
 
 from fastapi import Body, FastAPI, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 import annotate  # noqa: E402
 import triage    # noqa: E402
 
 app = FastAPI()
+
+
+@app.get("/")
+def home():
+    """Serve the UI from the function too, so the home page works even if
+    Vercel doesn't map public/index.html to "/"."""
+    return FileResponse(ROOT / "public" / "index.html")
+
+
+@app.get("/api/health")
+def health():
+    """Open this URL to check the function starts and the key is set."""
+    import os
+    return {"ok": True, "api_key_set": bool(os.getenv("ANTHROPIC_API_KEY")),
+            "template_found": (ROOT / "templates" / "MiLA_Annotation_Template_v0.xlsx").exists()}
 
 
 def _error(e: Exception) -> JSONResponse:
